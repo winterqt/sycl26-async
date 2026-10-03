@@ -498,8 +498,8 @@ fn clockResolution(_: ?*anyopaque, _: Clock) Clock.ResolutionError!Duration {
     @panic("clockResolution: not implemented");
 }
 
-fn sleep(_: ?*anyopaque, _: Timeout) Cancelable!void {
-    @panic("sleep: not implemented");
+fn sleep(_: ?*anyopaque, timeout: Timeout) Cancelable!void {
+    _ = std.c.nanosleep(&.{ .sec = timeout.duration.raw.toSeconds(), .nsec = 0 }, null);
 }
 
 fn random(_: ?*anyopaque, _: []u8) void {
