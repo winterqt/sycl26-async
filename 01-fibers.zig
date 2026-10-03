@@ -15,11 +15,57 @@ pub fn main(init: std.process.Init) !void {
         try .init(gpa, taskRun),
     };
 
+    while (true) {
+        for (&tasks) |*task| {
+            if (time(null) <= task.resume_at) continue;
+
+            current_fiber = task;
+            _ = contextSwitch(&.{
+                .old = &main_cpu,
+                .new = &task.cpu,
+            });
+        }
+    }
+
     // Execute all tasks concurrently using the provided fiber primitives.
     // You must also implement our "at home" Fiber.
 
     // As a follow up, can you also implement a form of
     // sleeping? Is std.c.nanosleep good enough?
+}
+
+const Fiber = struct {
+    cpu: CpuState,
+    stack: []align(16) u8,
+
+    resume_at: i64 = 0,
+
+    const Callback = *const fn () void;
+
+    fn init(gpa: Allocator, cb: Callback) !Fiber {
+        const stack = try gpa.alignedAlloc(u8, .@"16", 1024 * 16);
+        const top = @intFromPtr(stack.ptr) + stack.len;
+
+        return .{
+            .stack = stack,
+            .cpu = .{
+                .sp = top,
+                .fp = 0,
+                .pc = @intFromPtr(cb),
+            },
+        };
+    }
+};
+
+extern fn time(?*std.c.time_t) std.c.time_t;
+
+fn sleep(secs: std.c.time_t) void {
+    const fiber = current_fiber.?;
+    fiber.resume_at = time(null) + secs;
+    _ = contextSwitch(&.{
+        .old = &fiber.cpu,
+        .new = &main_cpu,
+    });
 }
 
 fn yield() void {
@@ -30,10 +76,11 @@ fn yield() void {
     });
 }
 
-fn taskRun() noreturn {
+fn taskRun() void {
     var idx: usize = 0;
     while (true) : (idx += 1) {
         std.debug.print("0x{x}: loop {}\n", .{ @intFromPtr(&idx), idx });
+        sleep(1);
         yield();
     }
 }
